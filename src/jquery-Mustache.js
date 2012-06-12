@@ -37,15 +37,50 @@
 			domTemplateType: 'text/html'
 		};
 
-	function getMustache() {
-		// Lazily retrieve Mustache from the window global if it hasn't been defined by
-		// the User.
+	// Retrieve the template engine
+	function getEngine() {
+		
+		// Laizy create a templating engine wrapper.  Note your own implementation can be provided
+		// by supplying it via `$.Template.options()`.
 		if (instance === null) {
-			instance = window.Mustache;
-			if (instance === void 0) {
-				$.error("Failed to locate Mustache instance, are you sure it has been loaded?");
+			
+			// Detect the engine
+			if (window.Mustache) {
+				instance = {
+					render: function (templateName, data, map) {
+						return window.Mustache.to_html(map[templateName], data, map);
+					},
+					remove: function (templateName) {
+						if (!templateName) {
+							window.Mustache.clearCache();
+						}
+					}
+				};
+			}
+			else if (window._) {
+				instance = {
+					_tplMap: {},
+					render: function (templateName, data, map) {
+						if (this._tplMap[templateName] === void 0) {
+							this._tplMap[templateName] = window._.template(map[templateName]);
+						}
+						return this._tplMap[templateName](data);
+					},
+					remove: function (templateName) {
+						if (templateName) {
+							delete this._tplMap[templateName];
+						}
+						else {
+							this._tplMap = {};
+						}
+					}
+				};
+			}
+			else {
+				$.error("Failed to detect Templating Engine");
 			}
 		}
+		
 		return instance;
 	}
 
@@ -111,6 +146,7 @@
 	function remove(templateName) {
 		var result = templateMap[templateName];
 		delete templateMap[templateName];
+		getEngine().remove(templateName);
 		return result;
 	}
 
@@ -119,7 +155,7 @@
 	 */
 	function clear() {
 		templateMap = {};
-		getMustache().clearCache();
+		getEngine().remove();
 	}
 
 	/**
@@ -133,7 +169,8 @@
 			}
 			return '';
 		}
-		return getMustache().to_html(templateMap[templateName], templateData, templateMap);
+		
+		return getEngine().render(templateName, templateData, templateMap);
 	}
 
 	/**
@@ -180,8 +217,7 @@
 		remove: remove,
 		clear: clear,
 		render: render,
-		templates: templates,
-		instance: instance
+		templates: templates
 	};
 
 	/**
@@ -193,7 +229,7 @@
 	 * 						template.
 	 * @param options.method	jQuery method to use when rendering, defaults to 'append'.
 	 */
-	$.fn.mustache = function (templateName, templateData, options) {
+	$.fn.template = function (templateName, templateData, options) {
         var settings = $.extend({
 			method:	'append'
 		}, options);
